@@ -1,0 +1,26 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+
+# Operating system and editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Generated files
+frontend/node_modules/
+frontend/dist/
+backend/backend/target/
+tmp/
+*.log
+
+# Local database data and backups
+postgres_data/
+*.sql.gz
+*.dump
