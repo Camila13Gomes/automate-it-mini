@@ -17,6 +17,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 
 import java.util.Map;
 
@@ -52,6 +53,8 @@ public class SecurityConfig {
         csrfRepository.setCookiePath("/");
 
         http
+                .securityContext(context -> context
+                        .securityContextRepository(new HttpSessionSecurityContextRepository()))
                 .cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf.csrfTokenRepository(csrfRepository))
                 .authorizeHttpRequests(auth -> auth
