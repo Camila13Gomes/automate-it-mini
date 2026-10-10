@@ -116,6 +116,9 @@ public class TestRunService {
     public TestRunResponse updateDetails(UUID id, UpdateTestRunDetailsRequest request, Authentication authentication) {
         TestRun run = findEntityById(id);
         access.requireProject(authentication, run.getProject().getId(), true);
+        if (isFinalStatus(run.getStatus())) {
+            throw new ConflictException("Finished test runs cannot be edited");
+        }
         run.setResponseBody(normalizeOptionalText(request.responseBody()));
         run.setEvidence(normalizeOptionalText(request.evidence()));
         run.setLogs(normalizeOptionalText(request.logs()));
