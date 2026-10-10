@@ -186,6 +186,50 @@ class TestRunControllerIntegrationTests {
                 .andExpect(jsonPath("$.page.totalElements").value(1));
     }
 
+
+    @Test
+    void rejectsEditingDetailsAfterTestRunIsFinished() throws Exception {
+        String response = mockMvc.perform(post("/api/test-runs")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validCreateRequest()))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        String id = objectMapper.readTree(response).get("id").asText();
+
+        mockMvc.perform(patch("/api/test-runs/{id}/status", id)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+{"status":"RUNNING"}
+"""))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(patch("/api/test-runs/{id}/status", id)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+{"status":"PASSED"}
+"""))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(patch("/api/test-runs/{id}/details", id)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+{"logs":"Attempted modification"}
+"""))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message")
+                        .value("Finished test runs cannot be edited"));
+
+        mockMvc.perform(get("/api/test-runs/{id}", id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PASSED"))
+                .andExpect(jsonPath("$.logs").doesNotExist());
+    }
+
     private String validCreateRequest() {
         return """
                 {
