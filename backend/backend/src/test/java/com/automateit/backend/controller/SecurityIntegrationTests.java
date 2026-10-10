@@ -32,6 +32,8 @@ class SecurityIntegrationTests {
     @Autowired MockMvc mockMvc;
     @Autowired UserAccountRepository users;
     @Autowired ProjectRepository projects;
+    @Autowired com.automateit.backend.repository.TestCaseRepository testCases;
+    @Autowired com.automateit.backend.repository.TestRunRepository testRuns;
     @Autowired PasswordEncoder passwordEncoder;
 
     private UUID defaultProjectId;
@@ -65,6 +67,35 @@ class SecurityIntegrationTests {
         defaultProjectId = defaultProject.getId();
         privateProjectId = privateProject.getId();
     }
+
+
+    @Test
+    @WithMockUser(username = "viewer", roles = "VIEWER")
+    void preventsDirectAccessToExistingPrivateTestRun() throws Exception {
+        Project privateProject = projects.findBySlug("private").orElseThrow();
+
+        var testCase = new com.automateit.backend.entity.TestCase();
+        testCase.setProject(privateProject);
+        testCase.setName("Private API Test");
+        testCase.setMethod("GET");
+        testCase.setEndpoint("/api/private");
+        testCase = testCases.save(testCase);
+
+        var run = new com.automateit.backend.entity.TestRun();
+        run.setProject(privateProject);
+        run.setTestCase(testCase);
+        run.setName("Private execution");
+        run.setProjectName(privateProject.getName());
+        run.setEnvironment(com.automateit.backend.enums.EnvironmentType.QA);
+        run.setExecutionType(com.automateit.backend.enums.ExecutionType.SMOKE);
+        run.setStatus(com.automateit.backend.enums.TestRunStatus.PENDING);
+        run.setCreatedBy("admin");
+        run = testRuns.save(run);
+
+        mockMvc.perform(get("/api/test-runs/{id}", run.getId()))
+                .andExpect(status().isForbidden());
+    }
+
 
     @Test
     void rejectsUnauthenticatedApiRequests() throws Exception {
@@ -128,6 +159,14 @@ class SecurityIntegrationTests {
     void preventsCrossProjectAccess() throws Exception {
         mockMvc.perform(get("/api/test-runs").param("projectId", privateProjectId.toString()))
                 .andExpect(status().isForbidden());
+    }
+
+
+    @Test
+    @WithMockUser(username = "viewer", roles = "VIEWER")
+    void preventsDirectAccessToPrivateTestRun() throws Exception {
+        mockMvc.perform(get("/api/test-runs/{id}", UUID.randomUUID()))
+                .andExpect(status().isNotFound());
     }
 
     @Test
