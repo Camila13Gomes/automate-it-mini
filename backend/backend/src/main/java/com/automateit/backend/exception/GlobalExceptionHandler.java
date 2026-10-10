@@ -18,6 +18,9 @@ import org.springframework.security.core.AuthenticationException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
 
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiError> handleResourceNotFound(
@@ -95,6 +98,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleGenericException(Exception exception, HttpServletRequest request) {
+        log.error("Unexpected error while processing {}", request.getRequestURI(), exception);
         return buildResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "An unexpected internal error occurred",
