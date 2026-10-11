@@ -158,8 +158,6 @@ button {
 
 .project-toolbar label { display: flex; align-items: center; gap: 10px; color: #78678b; font-size: 13px; font-weight: 700; }
 .project-toolbar select { min-width: 200px; padding: 10px 12px; border: 1px solid #ded3ee; border-radius: 11px; background: white; color: #463457; }
-.project-slug { padding: 7px 10px; border-radius: 20px; color: #7548df; background: #eee7ff; font: 12px monospace; }
-
 .admin-grid { display: grid; grid-template-columns: minmax(280px, .75fr) minmax(420px, 1.25fr); gap: 22px; align-items: start; }
 .admin-grid .test-form { margin: 0; }
 .admin-grid .form-group { display: grid; gap: 7px; margin-bottom: 15px; }
@@ -194,6 +192,36 @@ button {
   font-weight: 800;
 }
 .password-help { display: block; margin-top: 10px; color: #887797; }
+
+.dialog-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(35, 22, 51, 0.55);
+}
+
+.confirmation-dialog {
+  width: min(440px, 100%);
+  padding: 28px;
+  border-radius: 20px;
+  background: white;
+  box-shadow: 0 24px 70px rgba(35, 22, 51, 0.3);
+}
+
+.confirmation-dialog h2 { margin: 0; color: #3e2853; }
+.confirmation-dialog > p:not(.subtitle) { color: #75667f; line-height: 1.55; }
+.dialog-confirm-button {
+  border: 0;
+  border-radius: 13px;
+  padding: 12px 20px;
+  color: white;
+  background: #cf4963;
+  font-weight: 700;
+  cursor: pointer;
+}
 
 @media (max-width: 900px) {
   .admin-grid { grid-template-columns: 1fr; }

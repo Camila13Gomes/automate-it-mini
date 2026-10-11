@@ -18,8 +18,14 @@ const EXECUTION_ROLES = new Set(['ADMIN', 'MANAGER', 'TESTER'])
 const ENVIRONMENTS = ['DEV', 'QA', 'STAGING', 'PROD_SIMULATED']
 const EXECUTION_TYPES = ['SMOKE', 'REGRESSION', 'SANITY', 'API', 'UI']
 
-function formatDate(value) { return value ? new Date(value).toLocaleString() : '—' }
+function formatDate(value) { return value ? new Date(value).toLocaleString('en-US') : '—' }
 function formatDuration(ms) { return ms == null ? '—' : ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(2)} s` }
+function validationProps(message) {
+  return {
+    onInvalid: (event) => event.currentTarget.setCustomValidity(message),
+    onInput: (event) => event.currentTarget.setCustomValidity(''),
+  }
+}
 
 function App() {
   const [authLoading, setAuthLoading] = useState(true)
@@ -42,6 +48,7 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [confirmation, setConfirmation] = useState(null)
 
   const clearProtectedState = useCallback(() => {
     setSelectedProjectId('')
@@ -150,6 +157,16 @@ function App() {
   function openNewCase() { setActivePage('test-cases'); setCaseForm({ id: null, ...EMPTY_CASE }) }
   function openNewRun() { setActivePage('test-runs'); setRunForm({ id: null, ...EMPTY_RUN, testCaseId: caseOptions[0]?.id ?? '' }) }
 
+  function askConfirmation(message, confirmLabel) {
+    return new Promise((resolve) => setConfirmation({ message, confirmLabel, resolve }))
+  }
+
+  function closeConfirmation(result) {
+    const pending = confirmation
+    setConfirmation(null)
+    pending?.resolve(result)
+  }
+
   async function saveCase(event) {
     event.preventDefault(); setSaving(true); setError('')
     try {
@@ -160,7 +177,7 @@ function App() {
   }
 
   async function removeCase(item) {
-    if (!window.confirm(`Delete test case “${item.name}”?`)) return
+    if (!await askConfirmation(`Delete test case “${item.name}”?`, 'Delete test case')) return
     setSaving(true); setError('')
     try { await deleteTestCase(item.id); await Promise.all([loadCases(), loadCaseCatalog()]) }
     catch (deleteError) { setError(deleteError.message) }
@@ -207,7 +224,7 @@ function App() {
   }
 
   async function removeRun(run) {
-    if (!window.confirm(`Delete test run “${run.name}” and all stored evidence?`)) return
+    if (!await askConfirmation(`Delete test run “${run.name}” and all stored evidence?`, 'Delete test run')) return
     setSaving(true); setError('')
     try { await deleteTestRun(run.id); await Promise.all([loadRuns(), loadResults()]) }
     catch (deleteError) { setError(deleteError.message) }
@@ -247,7 +264,7 @@ function App() {
   }
 
   async function handleSetUserEnabled(account, enabled) {
-    if (!enabled && !window.confirm(`Disable access for “${account.displayName}”?`)) return false
+    if (!enabled && !await askConfirmation(`Disable access for “${account.displayName}”?`, 'Disable user')) return false
     setSaving(true); setError('')
     try { replaceUser(await setUserEnabled(account.id, enabled)); return true }
     catch (updateError) { setError(updateError.message); return false }
@@ -262,7 +279,7 @@ function App() {
   }
 
   async function handleDeleteUser(account) {
-    if (!window.confirm(`Permanently delete user “${account.displayName}”?`)) return false
+    if (!await askConfirmation(`Permanently delete user “${account.displayName}”?`, 'Delete user')) return false
     setSaving(true); setError('')
     try { await deleteUser(account.id); setUsers((current) => current.filter((item) => item.id !== account.id)); return true }
     catch (deleteError) { setError(deleteError.message); return false }
@@ -281,7 +298,7 @@ function App() {
   return <div className="app"><aside className="sidebar"><div className="logo"><img src={logo} alt="Automate-it Mini" className="logo-image" /></div>
     <nav>{navItems.map(([page, label]) => <button key={page} className={`nav-item ${visiblePage === page ? 'active' : ''}`} onClick={() => setActivePage(page)}>{label}</button>)}</nav>
     <div className="account-panel"><strong>{user.displayName}</strong><span>@{user.username} · {user.role}</span><button onClick={handleLogout}>Sign out</button></div></aside>
-    <main className="main-content"><div className="project-toolbar"><label><span>Active project</span><select value={selectedProjectId} onChange={(e) => { setSelectedProjectId(e.target.value); setCasePage(0); setRunPage(0); setResultPage(0) }}>{user.projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>{selectedProject && <span className="project-slug">/{selectedProject.slug}</span>}</div>
+    <main className="main-content"><div className="project-toolbar"><label><span>Active project</span><select value={selectedProjectId} onChange={(e) => { setSelectedProjectId(e.target.value); setCasePage(0); setRunPage(0); setResultPage(0) }}>{user.projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label></div>
       {error && <div className="error-banner"><span>{error}</span><button onClick={() => setError('')}>×</button></div>}
       {!selectedProject && visiblePage !== 'administration' ? <EmptyState title="No project access" text="Ask an administrator to assign a project." /> : loading ? <div className="loading-state">Loading data…</div> : <>
         {visiblePage === 'dashboard' && <Dashboard caseTotal={caseData.page.totalElements} runTotal={runData.page.totalElements} resultTotal={resultData.page.totalElements} passed={passedOnPage} failed={failedOnPage} canManage={canManageTests} canExecute={canExecuteTests} recentRuns={runData.content.slice(0, 5)} onNewCase={openNewCase} onNewRun={openNewRun} onViewRuns={() => setActivePage('test-runs')} />}
@@ -291,14 +308,14 @@ function App() {
         {visiblePage === 'administration' && <AdministrationPage projects={user.projects} users={users} currentUserId={user.id} saving={saving} onCreateProject={handleCreateProject} onCreateUser={handleCreateUser} onUpdateUser={handleUpdateUser} onSetUserEnabled={handleSetUserEnabled} onResetPassword={handleResetUserPassword} onDeleteUser={handleDeleteUser} />}
       </>}
       {selectedProject && visiblePage !== 'administration' && <button className="refresh-button" onClick={refreshAll}>Refresh data</button>}
-    </main></div>
+    </main>{confirmation && <ConfirmationDialog message={confirmation.message} confirmLabel={confirmation.confirmLabel} onCancel={() => closeConfirmation(false)} onConfirm={() => closeConfirmation(true)} />}</div>
 }
 
 function LoginPage({ saving, error, onLogin, onClearError }) {
   const [form, setForm] = useState({ username: '', password: '' })
   return <div className="auth-screen"><section className="login-card"><img src={logo} alt="Automate-it Mini" className="login-logo" /><p className="subtitle">Secure workspace</p><h1>Sign in</h1>
     {error && <div className="error-banner"><span>{error}</span><button onClick={onClearError}>×</button></div>}
-    <form onSubmit={(e) => { e.preventDefault(); onLogin(form) }}><FormField label="Username"><input autoFocus required value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} /></FormField><FormField label="Password"><input required type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></FormField><button className="primary-button login-button" disabled={saving}>Sign in</button></form>
+    <form onSubmit={(e) => { e.preventDefault(); onLogin(form) }}><FormField label="Username"><input autoFocus required {...validationProps('Enter your username.')} value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} /></FormField><FormField label="Password"><input required type="password" {...validationProps('Enter your password.')} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></FormField><button className="primary-button login-button" disabled={saving}>Sign in</button></form>
     <small>Credentials are managed by the administrator and never displayed.</small></section></div>
 }
 
@@ -311,8 +328,9 @@ function Dashboard({ caseTotal, runTotal, resultTotal, passed, failed, canManage
 
 function TestCasesPage({ data, filters, setFilters, page, setPage, form, setForm, saving, canManage, onNew, onSave, onDelete }) { return <>
   <PageHeader eyebrow="Test Management" title="Test Cases" buttonLabel={canManage ? '+ New Test Case' : null} onButtonClick={onNew} />
+  {!canManage && <div className="info-banner">Test definitions are read-only for your role. Testers can create executions and record results from the Test Runs page.</div>}
   <FilterBar><input placeholder="Search name, endpoint or description" value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} /><select value={filters.method} onChange={(e) => setFilters({ ...filters, method: e.target.value })}><option value="">All methods</option>{['GET','POST','PUT','PATCH','DELETE'].map((m) => <option key={m}>{m}</option>)}</select><button onClick={() => setFilters({ q: '', method: '' })}>Clear</button></FilterBar>
-  {form && <form className="test-form" onSubmit={onSave}><FormHeader eyebrow={form.id ? 'Edit definition' : 'New automated test'} title={form.id ? 'Edit Test Case' : 'Create Test Case'} onClose={() => setForm(null)} /><div className="form-grid"><FormField label="Name"><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></FormField><FormField label="Method"><select value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })}>{['GET','POST','PUT','PATCH','DELETE'].map((m) => <option key={m}>{m}</option>)}</select></FormField><FormField label="Endpoint" fullWidth><input required pattern="/.*" value={form.endpoint} onChange={(e) => setForm({ ...form, endpoint: e.target.value })} /></FormField><FormField label="Description" fullWidth><textarea rows="3" value={form.description ?? ''} onChange={(e) => setForm({ ...form, description: e.target.value })} /></FormField></div><FormActions saving={saving} onCancel={() => setForm(null)} saveLabel={form.id ? 'Update Test Case' : 'Save Test Case'} /></form>}
+  {form && <form className="test-form" onSubmit={onSave}><FormHeader eyebrow={form.id ? 'Edit definition' : 'New automated test'} title={form.id ? 'Edit Test Case' : 'Create Test Case'} onClose={() => setForm(null)} /><div className="form-grid"><FormField label="Name"><input required {...validationProps('Enter a test case name.')} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></FormField><FormField label="Method"><select value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })}>{['GET','POST','PUT','PATCH','DELETE'].map((m) => <option key={m}>{m}</option>)}</select></FormField><FormField label="Endpoint" fullWidth><input required pattern="/.*" {...validationProps('Enter an endpoint starting with /.')} value={form.endpoint} onChange={(e) => setForm({ ...form, endpoint: e.target.value })} /></FormField><FormField label="Description" fullWidth><textarea rows="3" value={form.description ?? ''} onChange={(e) => setForm({ ...form, description: e.target.value })} /></FormField></div><FormActions saving={saving} onCancel={() => setForm(null)} saveLabel={form.id ? 'Update Test Case' : 'Save Test Case'} /></form>}
   <section className="recent-tests"><div className="item-list">{data.content.map((item) => <article className="list-card" key={item.id}><div><h3>{item.name}</h3><p>{item.description || 'No description.'}</p><div className="endpoint"><strong>{item.method}</strong><code>{item.endpoint}</code></div></div>{canManage && <div className="row-actions"><button onClick={() => setForm({ ...item })}>Edit</button><button className="danger-button" onClick={() => onDelete(item)}>Delete</button></div>}</article>)}</div>{!data.content.length && <EmptyState title="No matching cases" text="Adjust filters or create a test case." />}
     <Pagination page={data.page} current={page} onChange={setPage} /></section></> }
 
@@ -324,14 +342,14 @@ function TestRunsPage({ data, testCases, filters, setFilters, page, setPage, for
   {detailsForm && <ExecutionDetailsForm form={detailsForm} setForm={setDetailsForm} saving={saving} onSave={onSaveDetails} />}
   <section className="recent-tests"><RunList runs={data.content} saving={saving} canExecute={canExecute} canManage={canManage} onStatus={onStatus} onEdit={(run) => setForm({ ...run })} onDetails={(run) => setDetailsForm({ id: run.id, responseBody: run.responseBody ?? '', evidence: run.evidence ?? '', logs: run.logs ?? '', steps: run.steps ?? [], assertions: run.assertions ?? [] })} onDelete={onDelete} onViewResult={onViewResult} />{!data.content.length && <EmptyState title="No matching runs" text="Adjust the filters or create an execution." />}<Pagination page={data.page} current={page} onChange={setPage} /></section></> }
 
-function RunForm({ form, setForm, testCases, saving, onSave }) { return <form className="test-form" onSubmit={onSave}><FormHeader eyebrow={form.id ? 'Edit execution' : 'New execution'} title={form.id ? 'Edit Test Run' : 'Create Test Run'} onClose={() => setForm(null)} /><div className="form-grid"><FormField label="Run name"><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></FormField><FormField label="Test Case"><select required value={form.testCaseId} onChange={(e) => setForm({ ...form, testCaseId: e.target.value })}><option value="">Select a test case</option>{testCases.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></FormField><FormField label="Environment"><select value={form.environment} onChange={(e) => setForm({ ...form, environment: e.target.value })}>{ENVIRONMENTS.map((v) => <option key={v}>{v}</option>)}</select></FormField><FormField label="Execution type"><select value={form.executionType} onChange={(e) => setForm({ ...form, executionType: e.target.value })}>{EXECUTION_TYPES.map((v) => <option key={v}>{v}</option>)}</select></FormField><FormField label="Notes" fullWidth><textarea rows="3" value={form.notes ?? ''} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></FormField></div><FormActions saving={saving} onCancel={() => setForm(null)} saveLabel={form.id ? 'Update Test Run' : 'Create Test Run'} /></form> }
+function RunForm({ form, setForm, testCases, saving, onSave }) { return <form className="test-form" onSubmit={onSave}><FormHeader eyebrow={form.id ? 'Edit execution' : 'New execution'} title={form.id ? 'Edit Test Run' : 'Create Test Run'} onClose={() => setForm(null)} /><div className="form-grid"><FormField label="Run name"><input required {...validationProps('Enter a test run name.')} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></FormField><FormField label="Test Case"><select required {...validationProps('Select a test case.')} value={form.testCaseId} onChange={(e) => setForm({ ...form, testCaseId: e.target.value })}><option value="">Select a test case</option>{testCases.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></FormField><FormField label="Environment"><select value={form.environment} onChange={(e) => setForm({ ...form, environment: e.target.value })}>{ENVIRONMENTS.map((v) => <option key={v}>{v}</option>)}</select></FormField><FormField label="Execution type"><select value={form.executionType} onChange={(e) => setForm({ ...form, executionType: e.target.value })}>{EXECUTION_TYPES.map((v) => <option key={v}>{v}</option>)}</select></FormField><FormField label="Notes" fullWidth><textarea rows="3" value={form.notes ?? ''} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></FormField></div><FormActions saving={saving} onCancel={() => setForm(null)} saveLabel={form.id ? 'Update Test Run' : 'Create Test Run'} /></form> }
 
 function ExecutionDetailsForm({ form, setForm, saving, onSave }) {
   const addStep = () => setForm({ ...form, steps: [...form.steps, { description: '', expectedResult: '', actualResult: '', status: 'PENDING' }] })
   const addAssertion = () => setForm({ ...form, assertions: [...form.assertions, { name: '', expectedValue: '', actualValue: '', passed: false }] })
   return <form className="test-form details-form" onSubmit={onSave}><FormHeader eyebrow="Execution evidence" title="Steps, Assertions and Output" onClose={() => setForm(null)} /><div className="form-grid"><FormField label="Response body" fullWidth><textarea rows="5" value={form.responseBody} onChange={(e) => setForm({ ...form, responseBody: e.target.value })} /></FormField><FormField label="Evidence (links or notes)" fullWidth><textarea rows="3" value={form.evidence} onChange={(e) => setForm({ ...form, evidence: e.target.value })} /></FormField><FormField label="Logs" fullWidth><textarea rows="5" value={form.logs} onChange={(e) => setForm({ ...form, logs: e.target.value })} /></FormField></div>
-    <CollectionEditor title="Steps" onAdd={addStep}>{form.steps.map((step, index) => <div className="detail-row" key={index}><input required placeholder="Step description" value={step.description} onChange={(e) => setForm({ ...form, steps: form.steps.map((v, i) => i === index ? { ...v, description: e.target.value } : v) })} /><input placeholder="Expected" value={step.expectedResult ?? ''} onChange={(e) => setForm({ ...form, steps: form.steps.map((v, i) => i === index ? { ...v, expectedResult: e.target.value } : v) })} /><input placeholder="Actual" value={step.actualResult ?? ''} onChange={(e) => setForm({ ...form, steps: form.steps.map((v, i) => i === index ? { ...v, actualResult: e.target.value } : v) })} /><select value={step.status} onChange={(e) => setForm({ ...form, steps: form.steps.map((v, i) => i === index ? { ...v, status: e.target.value } : v) })}>{['PENDING','PASSED','FAILED','SKIPPED'].map((v) => <option key={v}>{v}</option>)}</select><button type="button" onClick={() => setForm({ ...form, steps: form.steps.filter((_, i) => i !== index) })}>Remove</button></div>)}</CollectionEditor>
-    <CollectionEditor title="Assertions" onAdd={addAssertion}>{form.assertions.map((item, index) => <div className="detail-row assertion-row" key={index}><input required placeholder="Assertion" value={item.name} onChange={(e) => setForm({ ...form, assertions: form.assertions.map((v, i) => i === index ? { ...v, name: e.target.value } : v) })} /><input placeholder="Expected" value={item.expectedValue ?? ''} onChange={(e) => setForm({ ...form, assertions: form.assertions.map((v, i) => i === index ? { ...v, expectedValue: e.target.value } : v) })} /><input placeholder="Actual" value={item.actualValue ?? ''} onChange={(e) => setForm({ ...form, assertions: form.assertions.map((v, i) => i === index ? { ...v, actualValue: e.target.value } : v) })} /><label><input type="checkbox" checked={item.passed} onChange={(e) => setForm({ ...form, assertions: form.assertions.map((v, i) => i === index ? { ...v, passed: e.target.checked } : v) })} /> Passed</label><button type="button" onClick={() => setForm({ ...form, assertions: form.assertions.filter((_, i) => i !== index) })}>Remove</button></div>)}</CollectionEditor><FormActions saving={saving} onCancel={() => setForm(null)} saveLabel="Save execution details" /></form>
+    <CollectionEditor title="Steps" onAdd={addStep}>{form.steps.map((step, index) => <div className="detail-row" key={index}><input required {...validationProps('Enter a step description.')} placeholder="Step description" value={step.description} onChange={(e) => setForm({ ...form, steps: form.steps.map((v, i) => i === index ? { ...v, description: e.target.value } : v) })} /><input placeholder="Expected" value={step.expectedResult ?? ''} onChange={(e) => setForm({ ...form, steps: form.steps.map((v, i) => i === index ? { ...v, expectedResult: e.target.value } : v) })} /><input placeholder="Actual" value={step.actualResult ?? ''} onChange={(e) => setForm({ ...form, steps: form.steps.map((v, i) => i === index ? { ...v, actualResult: e.target.value } : v) })} /><select value={step.status} onChange={(e) => setForm({ ...form, steps: form.steps.map((v, i) => i === index ? { ...v, status: e.target.value } : v) })}>{['PENDING','PASSED','FAILED','SKIPPED'].map((v) => <option key={v}>{v}</option>)}</select><button type="button" onClick={() => setForm({ ...form, steps: form.steps.filter((_, i) => i !== index) })}>Remove</button></div>)}</CollectionEditor>
+    <CollectionEditor title="Assertions" onAdd={addAssertion}>{form.assertions.map((item, index) => <div className="detail-row assertion-row" key={index}><input required {...validationProps('Enter an assertion name.')} placeholder="Assertion" value={item.name} onChange={(e) => setForm({ ...form, assertions: form.assertions.map((v, i) => i === index ? { ...v, name: e.target.value } : v) })} /><input placeholder="Expected" value={item.expectedValue ?? ''} onChange={(e) => setForm({ ...form, assertions: form.assertions.map((v, i) => i === index ? { ...v, expectedValue: e.target.value } : v) })} /><input placeholder="Actual" value={item.actualValue ?? ''} onChange={(e) => setForm({ ...form, assertions: form.assertions.map((v, i) => i === index ? { ...v, actualValue: e.target.value } : v) })} /><label><input type="checkbox" checked={item.passed} onChange={(e) => setForm({ ...form, assertions: form.assertions.map((v, i) => i === index ? { ...v, passed: e.target.checked } : v) })} /> Passed</label><button type="button" onClick={() => setForm({ ...form, assertions: form.assertions.filter((_, i) => i !== index) })}>Remove</button></div>)}</CollectionEditor><FormActions saving={saving} onCancel={() => setForm(null)} saveLabel="Save execution details" /></form>
 }
 
 function CollectionEditor({ title, onAdd, children }) { return <section className="collection-editor"><div className="section-header"><h3>{title}</h3><button type="button" onClick={onAdd}>+ Add</button></div>{children}</section> }
@@ -363,8 +381,8 @@ function AdministrationPage({ projects, users, currentUserId, saving, onCreatePr
         if (await onCreateProject(projectForm)) setProjectForm(EMPTY_PROJECT)
       }}>
         <FormHeader eyebrow="Project segregation" title="Create Project" />
-        <FormField label="Project name"><input required value={projectForm.name} onChange={(event) => setProjectForm({ name: event.target.value, slug: event.target.value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') })} /></FormField>
-        <FormField label="Slug"><input required value={projectForm.slug} onChange={(event) => setProjectForm({ ...projectForm, slug: event.target.value })} /></FormField>
+        <FormField label="Project name"><input required {...validationProps('Enter a project name.')} value={projectForm.name} onChange={(event) => setProjectForm({ name: event.target.value, slug: event.target.value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') })} /></FormField>
+        <FormField label="Slug"><input required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" {...validationProps('Use lowercase letters, numbers and hyphens only.')} value={projectForm.slug} onChange={(event) => setProjectForm({ ...projectForm, slug: event.target.value })} /></FormField>
         <button className="primary-button" disabled={saving}>Create Project</button>
       </form>
       <form className="test-form" onSubmit={async (event) => {
@@ -392,7 +410,7 @@ function AdministrationPage({ projects, users, currentUserId, saving, onCreatePr
       if (await onResetPassword(passwordReset.id, passwordReset.password)) setPasswordReset(null)
     }}>
       <FormHeader eyebrow="Secure credential" title={`Reset password for ${passwordReset.displayName}`} onClose={() => setPasswordReset(null)} />
-      <FormField label="New password"><input autoFocus required type="password" autoComplete="new-password" minLength="12" maxLength="72" pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+" value={passwordReset.password} onChange={(event) => setPasswordReset({ ...passwordReset, password: event.target.value })} /></FormField>
+      <FormField label="New password"><input autoFocus required type="password" autoComplete="new-password" minLength="12" maxLength="72" pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+" {...validationProps('Use 12–72 characters with uppercase, lowercase and a number.')} value={passwordReset.password} onChange={(event) => setPasswordReset({ ...passwordReset, password: event.target.value })} /></FormField>
       <small className="password-help">Use 12–72 characters, including uppercase, lowercase and a number. The password is never displayed after saving.</small>
       <FormActions saving={saving} onCancel={() => setPasswordReset(null)} saveLabel="Reset password" />
     </form>}
@@ -412,12 +430,16 @@ function AdministrationPage({ projects, users, currentUserId, saving, onCreatePr
 
 function UserAccountFields({ form, setForm, projects, includePassword = false }) {
   return <div className="form-grid">
-    <FormField label="Username"><input required value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} /></FormField>
-    <FormField label="Display name"><input required value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} /></FormField>
-    {includePassword && <FormField label="Password"><input required type="password" autoComplete="new-password" minLength="12" maxLength="72" pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} /></FormField>}
+    <FormField label="Username"><input required pattern="[A-Za-z0-9._-]+" {...validationProps('Use letters, numbers, dots, underscores or hyphens only.')} value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} /></FormField>
+    <FormField label="Display name"><input required {...validationProps('Enter a display name.')} value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} /></FormField>
+    {includePassword && <FormField label="Password"><input required type="password" autoComplete="new-password" minLength="12" maxLength="72" pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+" {...validationProps('Use 12–72 characters with uppercase, lowercase and a number.')} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} /></FormField>}
     <FormField label="Role"><select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}>{['ADMIN','MANAGER','TESTER','VIEWER'].map((role) => <option key={role}>{role}</option>)}</select></FormField>
     <FormField label="Assigned projects" fullWidth><div className="project-checkboxes">{projects.map((project) => <label key={project.id}><input type="checkbox" checked={form.projectIds.includes(project.id)} onChange={(event) => setForm({ ...form, projectIds: event.target.checked ? [...form.projectIds, project.id] : form.projectIds.filter((id) => id !== project.id) })} />{project.name}</label>)}</div></FormField>
   </div>
+}
+
+function ConfirmationDialog({ message, confirmLabel, onCancel, onConfirm }) {
+  return <div className="dialog-backdrop" role="presentation"><section className="confirmation-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirmation-title" aria-describedby="confirmation-message"><p className="subtitle">Please confirm</p><h2 id="confirmation-title">Confirm action</h2><p id="confirmation-message">{message}</p><div className="form-actions"><button type="button" className="secondary-button" onClick={onCancel}>Cancel</button><button type="button" className="danger-button dialog-confirm-button" onClick={onConfirm}>{confirmLabel}</button></div></section></div>
 }
 
 function FilterBar({ children }) { return <div className="filter-bar">{children}</div> }
