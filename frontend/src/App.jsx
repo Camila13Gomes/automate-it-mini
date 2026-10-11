@@ -43,6 +43,24 @@ function App() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  const clearProtectedState = useCallback(() => {
+    setSelectedProjectId('')
+    setActivePage('dashboard')
+    setCaseData(EMPTY_PAGE)
+    setCaseCatalog([])
+    setRunData(EMPTY_PAGE)
+    setResultData(EMPTY_PAGE)
+    setCasePage(0)
+    setRunPage(0)
+    setResultPage(0)
+    setCaseFilters({ q: '', method: '' })
+    setRunFilters({ q: '', status: '', environment: '', executionType: '', testCaseId: '' })
+    setCaseForm(null)
+    setRunForm(null)
+    setDetailsForm(null)
+    setUsers([])
+  }, [])
+
   useEffect(() => {
     getCurrentUser().then((current) => {
       setUser(current); setSelectedProjectId(current.projects[0]?.id ?? '')
@@ -53,11 +71,11 @@ function App() {
   useEffect(() => {
     function clearExpiredSession() {
       setUser(null)
-      setSelectedProjectId('')
+      clearProtectedState()
     }
     window.addEventListener('auth:unauthorized', clearExpiredSession)
     return () => window.removeEventListener('auth:unauthorized', clearExpiredSession)
-  }, [])
+  }, [clearProtectedState])
 
   const loadCases = useCallback(async () => {
     if (!selectedProjectId) return setCaseData(EMPTY_PAGE)
@@ -119,13 +137,14 @@ function App() {
     setSaving(true); setError('')
     try {
       const authenticated = await login(credentials)
+      clearProtectedState()
       setUser(authenticated); setSelectedProjectId(authenticated.projects[0]?.id ?? '')
     } catch (loginError) { setError(loginError.message) } finally { setSaving(false) }
   }
 
   async function handleLogout() {
     setSaving(true); try { await logout() } catch { /* clear local state */ }
-    setUser(null); setSelectedProjectId(''); setSaving(false)
+    setUser(null); clearProtectedState(); setSaving(false)
   }
 
   function openNewCase() { setActivePage('test-cases'); setCaseForm({ id: null, ...EMPTY_CASE }) }
@@ -253,24 +272,25 @@ function App() {
   if (authLoading) return <div className="auth-screen"><div className="loading-state">Checking session…</div></div>
   if (!user) return <LoginPage saving={saving} error={error} onLogin={handleLogin} onClearError={() => setError('')} />
 
+  const visiblePage = activePage === 'administration' && user.role !== 'ADMIN' ? 'dashboard' : activePage
   const navItems = [['dashboard', 'Dashboard'], ['test-cases', 'Test Cases'], ['test-runs', 'Test Runs'], ['results', 'Results'],
     ...(user.role === 'ADMIN' ? [['administration', 'Administration']] : [])]
   const passedOnPage = resultData.content.filter((run) => run.status === 'PASSED').length
   const failedOnPage = resultData.content.filter((run) => run.status === 'FAILED').length
 
   return <div className="app"><aside className="sidebar"><div className="logo"><img src={logo} alt="Automate-it Mini" className="logo-image" /></div>
-    <nav>{navItems.map(([page, label]) => <button key={page} className={`nav-item ${activePage === page ? 'active' : ''}`} onClick={() => setActivePage(page)}>{label}</button>)}</nav>
+    <nav>{navItems.map(([page, label]) => <button key={page} className={`nav-item ${visiblePage === page ? 'active' : ''}`} onClick={() => setActivePage(page)}>{label}</button>)}</nav>
     <div className="account-panel"><strong>{user.displayName}</strong><span>@{user.username} · {user.role}</span><button onClick={handleLogout}>Sign out</button></div></aside>
     <main className="main-content"><div className="project-toolbar"><label><span>Active project</span><select value={selectedProjectId} onChange={(e) => { setSelectedProjectId(e.target.value); setCasePage(0); setRunPage(0); setResultPage(0) }}>{user.projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>{selectedProject && <span className="project-slug">/{selectedProject.slug}</span>}</div>
       {error && <div className="error-banner"><span>{error}</span><button onClick={() => setError('')}>×</button></div>}
-      {!selectedProject && activePage !== 'administration' ? <EmptyState title="No project access" text="Ask an administrator to assign a project." /> : loading ? <div className="loading-state">Loading data…</div> : <>
-        {activePage === 'dashboard' && <Dashboard caseTotal={caseData.page.totalElements} runTotal={runData.page.totalElements} resultTotal={resultData.page.totalElements} passed={passedOnPage} failed={failedOnPage} canManage={canManageTests} canExecute={canExecuteTests} recentRuns={runData.content.slice(0, 5)} onNewCase={openNewCase} onNewRun={openNewRun} onViewRuns={() => setActivePage('test-runs')} />}
-        {activePage === 'test-cases' && <TestCasesPage data={caseData} filters={caseFilters} setFilters={(value) => { setCasePage(0); setCaseFilters(value) }} page={casePage} setPage={setCasePage} form={caseForm} setForm={setCaseForm} saving={saving} canManage={canManageTests} onNew={openNewCase} onSave={saveCase} onDelete={removeCase} />}
-        {activePage === 'test-runs' && <TestRunsPage data={runData} testCases={caseOptions} filters={runFilters} setFilters={(value) => { setRunPage(0); setRunFilters(value) }} page={runPage} setPage={setRunPage} form={runForm} setForm={setRunForm} detailsForm={detailsForm} setDetailsForm={setDetailsForm} saving={saving} canExecute={canExecuteTests} canManage={canManageTests} onNew={openNewRun} onSave={saveRun} onSaveDetails={saveDetails} onStatus={changeStatus} onDelete={removeRun} onViewResult={() => setActivePage('results')} />}
-        {activePage === 'results' && <ResultsPage data={resultData} page={resultPage} setPage={setResultPage} canExecute={canExecuteTests} onNew={openNewRun} />}
-        {activePage === 'administration' && <AdministrationPage projects={user.projects} users={users} currentUserId={user.id} saving={saving} onCreateProject={handleCreateProject} onCreateUser={handleCreateUser} onUpdateUser={handleUpdateUser} onSetUserEnabled={handleSetUserEnabled} onResetPassword={handleResetUserPassword} onDeleteUser={handleDeleteUser} />}
+      {!selectedProject && visiblePage !== 'administration' ? <EmptyState title="No project access" text="Ask an administrator to assign a project." /> : loading ? <div className="loading-state">Loading data…</div> : <>
+        {visiblePage === 'dashboard' && <Dashboard caseTotal={caseData.page.totalElements} runTotal={runData.page.totalElements} resultTotal={resultData.page.totalElements} passed={passedOnPage} failed={failedOnPage} canManage={canManageTests} canExecute={canExecuteTests} recentRuns={runData.content.slice(0, 5)} onNewCase={openNewCase} onNewRun={openNewRun} onViewRuns={() => setActivePage('test-runs')} />}
+        {visiblePage === 'test-cases' && <TestCasesPage data={caseData} filters={caseFilters} setFilters={(value) => { setCasePage(0); setCaseFilters(value) }} page={casePage} setPage={setCasePage} form={caseForm} setForm={setCaseForm} saving={saving} canManage={canManageTests} onNew={openNewCase} onSave={saveCase} onDelete={removeCase} />}
+        {visiblePage === 'test-runs' && <TestRunsPage data={runData} testCases={caseOptions} filters={runFilters} setFilters={(value) => { setRunPage(0); setRunFilters(value) }} page={runPage} setPage={setRunPage} form={runForm} setForm={setRunForm} detailsForm={detailsForm} setDetailsForm={setDetailsForm} saving={saving} canExecute={canExecuteTests} canManage={canManageTests} onNew={openNewRun} onSave={saveRun} onSaveDetails={saveDetails} onStatus={changeStatus} onDelete={removeRun} onViewResult={() => setActivePage('results')} />}
+        {visiblePage === 'results' && <ResultsPage data={resultData} page={resultPage} setPage={setResultPage} canExecute={canExecuteTests} onNew={openNewRun} />}
+        {visiblePage === 'administration' && <AdministrationPage projects={user.projects} users={users} currentUserId={user.id} saving={saving} onCreateProject={handleCreateProject} onCreateUser={handleCreateUser} onUpdateUser={handleUpdateUser} onSetUserEnabled={handleSetUserEnabled} onResetPassword={handleResetUserPassword} onDeleteUser={handleDeleteUser} />}
       </>}
-      {selectedProject && activePage !== 'administration' && <button className="refresh-button" onClick={refreshAll}>Refresh data</button>}
+      {selectedProject && visiblePage !== 'administration' && <button className="refresh-button" onClick={refreshAll}>Refresh data</button>}
     </main></div>
 }
 
