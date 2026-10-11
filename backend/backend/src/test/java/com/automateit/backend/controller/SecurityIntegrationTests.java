@@ -7,6 +7,7 @@ import com.automateit.backend.repository.ProjectRepository;
 import com.automateit.backend.repository.UserAccountRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.DefaultApplicationArguments;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -35,6 +36,7 @@ class SecurityIntegrationTests {
     @Autowired com.automateit.backend.repository.TestCaseRepository testCases;
     @Autowired com.automateit.backend.repository.TestRunRepository testRuns;
     @Autowired PasswordEncoder passwordEncoder;
+    @Autowired com.automateit.backend.config.BootstrapData bootstrapData;
 
     private UUID defaultProjectId;
     private UUID privateProjectId;
@@ -109,7 +111,7 @@ class SecurityIntegrationTests {
         MockHttpSession session = (MockHttpSession) mockMvc.perform(post("/api/auth/login")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"username\":\"admin\",\"password\":\"TestAdmin9876\"}"))
+                        .content("{\"username\":\"  ADMIN  \",\"password\":\"TestAdmin9876\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.role").value("ADMIN"))
                 .andReturn().getRequest().getSession(false);
@@ -117,6 +119,30 @@ class SecurityIntegrationTests {
         mockMvc.perform(get("/api/auth/me").session(session))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.username").value("admin"));
+    }
+
+    @Test
+    void exposesCsrfTokenForTheFrontend() throws Exception {
+        mockMvc.perform(get("/api/auth/csrf"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").isNotEmpty())
+                .andExpect(jsonPath("$.headerName").isNotEmpty());
+    }
+
+    @Test
+    void bootstrapCredentialRecoversPersistedAdministratorLock() throws Exception {
+        UserAccount admin = users.findByUsernameIgnoreCase("admin").orElseThrow();
+        admin.setFailedLoginAttempts(5);
+        admin.setLockedUntil(java.time.LocalDateTime.now().plusMinutes(15));
+        users.saveAndFlush(admin);
+
+        bootstrapData.run(new DefaultApplicationArguments(new String[0]));
+
+        UserAccount recovered = users.findByUsernameIgnoreCase("admin").orElseThrow();
+        org.junit.jupiter.api.Assertions.assertEquals(0, recovered.getFailedLoginAttempts());
+        org.junit.jupiter.api.Assertions.assertNull(recovered.getLockedUntil());
+        org.junit.jupiter.api.Assertions.assertTrue(
+                passwordEncoder.matches("TestAdmin9876", recovered.getPasswordHash()));
     }
 
 

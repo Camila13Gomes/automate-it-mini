@@ -36,6 +36,9 @@ export async function apiFetch(path, options = {}) {
     headers,
     credentials: 'include',
   })
+  if (response.status === 401) {
+    window.dispatchEvent(new Event('auth:unauthorized'))
+  }
   return parseResponse(response)
 }
 

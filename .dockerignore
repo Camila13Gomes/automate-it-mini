@@ -1,0 +1,17 @@
+.git
+.github
+.codex
+.agents
+**/node_modules
+**/target
+**/dist
+**/.env
+**/.env.*
+!**/.env.example
+**/cookies.txt
+**/*cookie*
+**/*.bak
+**/*.log
+**/.DS_Store
+tmp
+output

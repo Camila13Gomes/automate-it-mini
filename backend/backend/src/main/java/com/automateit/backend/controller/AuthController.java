@@ -22,6 +22,8 @@ import org.springframework.security.web.context.HttpSessionSecurityContextReposi
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Locale;
+
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
@@ -50,13 +52,14 @@ public class AuthController {
     @PostMapping("/login")
     public AuthUserResponse login(@Valid @RequestBody LoginRequest request,
                                   HttpServletRequest servletRequest, HttpServletResponse servletResponse) {
-        loginAttempts.ensureNotLocked(request.username());
+        String username = request.username().trim().toLowerCase(Locale.ROOT);
+        loginAttempts.ensureNotLocked(username);
         Authentication authentication;
         try {
             authentication = authenticationManager.authenticate(
-                    UsernamePasswordAuthenticationToken.unauthenticated(request.username(), request.password()));
+                    UsernamePasswordAuthenticationToken.unauthenticated(username, request.password()));
         } catch (AuthenticationException exception) {
-            loginAttempts.recordFailure(request.username());
+            loginAttempts.recordFailure(username);
             throw exception;
         }
         loginAttempts.recordSuccess(authentication.getName());

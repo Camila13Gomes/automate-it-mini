@@ -14,6 +14,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Locale;
+
 @Component
 public class BootstrapData implements ApplicationRunner {
     private final ProjectRepository projects;
@@ -44,6 +47,10 @@ public class BootstrapData implements ApplicationRunner {
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
+        String normalizedAdminUsername = normalizeAdminUsername();
+        String normalizedAdminDisplayName = normalizeAdminDisplayName();
+        validateBootstrapPassword();
+
         Project defaultProject = projects.findBySlug("default").orElseGet(() -> {
             Project project = new Project();
             project.setName("Default Project");
@@ -79,20 +86,55 @@ public class BootstrapData implements ApplicationRunner {
             testRuns.save(testRun);
         });
 
-        var existingAdmin = users.findByUsernameIgnoreCase(adminUsername);
+        var existingAdmin = users.findByUsernameIgnoreCase(normalizedAdminUsername);
         if (existingAdmin.isEmpty() && adminPassword.isBlank()) {
             throw new IllegalStateException("ADMIN_PASSWORD is required when creating the first administrator");
         }
         UserAccount admin = existingAdmin.orElseGet(UserAccount::new);
-        admin.setUsername(adminUsername.trim().toLowerCase());
-        admin.setDisplayName(adminDisplayName.trim());
+        admin.setUsername(normalizedAdminUsername);
+        admin.setDisplayName(normalizedAdminDisplayName);
         if (!adminPassword.isBlank()
                 && (admin.getPasswordHash() == null || !passwordEncoder.matches(adminPassword, admin.getPasswordHash()))) {
             admin.setPasswordHash(passwordEncoder.encode(adminPassword));
+        }
+        if (!adminPassword.isBlank()) {
+            // ADMIN_PASSWORD is an explicit recovery/bootstrap credential. When it is
+            // supplied, the administrator must not remain locked by failures stored in
+            // a reused PostgreSQL volume.
+            admin.setFailedLoginAttempts(0);
+            admin.setLockedUntil(null);
         }
         admin.setRole(UserRole.ADMIN);
         admin.setEnabled(true);
         admin.getProjects().add(defaultProject);
         users.save(admin);
+    }
+
+    private String normalizeAdminUsername() {
+        String normalized = adminUsername == null ? "" : adminUsername.trim().toLowerCase(Locale.ROOT);
+        if (normalized.isEmpty() || !normalized.matches("[a-z0-9._-]+") || normalized.length() > 100) {
+            throw new IllegalStateException("ADMIN_USERNAME must contain only letters, numbers, dot, underscore or hyphen");
+        }
+        return normalized;
+    }
+
+    private String normalizeAdminDisplayName() {
+        String normalized = adminDisplayName == null ? "" : adminDisplayName.trim();
+        if (normalized.isEmpty() || normalized.length() > 150) {
+            throw new IllegalStateException("ADMIN_DISPLAY_NAME must contain between 1 and 150 characters");
+        }
+        return normalized;
+    }
+
+    private void validateBootstrapPassword() {
+        if (adminPassword == null || adminPassword.isBlank()) return;
+        int byteLength = adminPassword.getBytes(StandardCharsets.UTF_8).length;
+        if (adminPassword.length() < 12 || byteLength > 72
+                || !adminPassword.matches(".*[a-z].*")
+                || !adminPassword.matches(".*[A-Z].*")
+                || !adminPassword.matches(".*\\d.*")) {
+            throw new IllegalStateException(
+                    "ADMIN_PASSWORD must contain 12 to 72 bytes, including uppercase, lowercase and a number");
+        }
     }
 }
