@@ -119,6 +119,30 @@ class SecurityIntegrationTests {
                 .andExpect(jsonPath("$.username").value("admin"));
     }
 
+
+    @Test
+    void logoutInvalidatesAuthenticatedSession() throws Exception {
+        MockHttpSession session = (MockHttpSession) mockMvc.perform(post("/api/auth/login")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"username":"viewer","password":"viewer123"}
+                                """))
+                .andExpect(status().isOk())
+                .andReturn().getRequest().getSession(false);
+
+        mockMvc.perform(get("/api/auth/me").session(session))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/auth/logout").session(session).with(csrf()))
+                .andExpect(status().isOk());
+
+        org.junit.jupiter.api.Assertions.assertTrue(session.isInvalid());
+
+        mockMvc.perform(get("/api/auth/me"))
+                .andExpect(status().isUnauthorized());
+    }
+
     @Test
     void storesOnlyPasswordHashAndLocksRepeatedFailures() throws Exception {
         UserAccount persisted = users.findByUsernameIgnoreCase("locktest").orElseThrow();
