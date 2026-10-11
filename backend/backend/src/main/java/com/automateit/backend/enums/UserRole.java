@@ -6,7 +6,11 @@ public enum UserRole {
     TESTER,
     VIEWER;
 
-    public boolean canWriteTests() {
+    public boolean canManageTests() {
+        return this == ADMIN || this == MANAGER;
+    }
+
+    public boolean canExecuteTests() {
         return this == ADMIN || this == MANAGER || this == TESTER;
     }
 }

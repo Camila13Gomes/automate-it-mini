@@ -27,13 +27,15 @@ public class BootstrapData implements ApplicationRunner {
     private final String adminUsername;
     private final String adminPassword;
     private final String adminDisplayName;
+    private final boolean forceAdminRecovery;
 
     public BootstrapData(ProjectRepository projects, UserAccountRepository users,
                          TestCaseRepository testCases, TestRunRepository testRuns,
                          PasswordEncoder passwordEncoder,
                          @Value("${app.bootstrap.admin-username}") String adminUsername,
                          @Value("${app.bootstrap.admin-password}") String adminPassword,
-                         @Value("${app.bootstrap.admin-display-name}") String adminDisplayName) {
+                         @Value("${app.bootstrap.admin-display-name}") String adminDisplayName,
+                         @Value("${app.bootstrap.force-admin-recovery:false}") boolean forceAdminRecovery) {
         this.projects = projects;
         this.users = users;
         this.testCases = testCases;
@@ -42,6 +44,7 @@ public class BootstrapData implements ApplicationRunner {
         this.adminUsername = adminUsername;
         this.adminPassword = adminPassword;
         this.adminDisplayName = adminDisplayName;
+        this.forceAdminRecovery = forceAdminRecovery;
     }
 
     @Override
@@ -87,26 +90,30 @@ public class BootstrapData implements ApplicationRunner {
         });
 
         var existingAdmin = users.findByUsernameIgnoreCase(normalizedAdminUsername);
+        if (existingAdmin.isEmpty() && users.countByRoleAndEnabledTrue(UserRole.ADMIN) > 0 && !forceAdminRecovery) {
+            return;
+        }
         if (existingAdmin.isEmpty() && adminPassword.isBlank()) {
             throw new IllegalStateException("ADMIN_PASSWORD is required when creating the first administrator");
         }
         UserAccount admin = existingAdmin.orElseGet(UserAccount::new);
-        admin.setUsername(normalizedAdminUsername);
-        admin.setDisplayName(normalizedAdminDisplayName);
-        if (!adminPassword.isBlank()
-                && (admin.getPasswordHash() == null || !passwordEncoder.matches(adminPassword, admin.getPasswordHash()))) {
+        if (existingAdmin.isEmpty()) {
+            admin.setUsername(normalizedAdminUsername);
+            admin.setDisplayName(normalizedAdminDisplayName);
             admin.setPasswordHash(passwordEncoder.encode(adminPassword));
-        }
-        if (!adminPassword.isBlank()) {
-            // ADMIN_PASSWORD is an explicit recovery/bootstrap credential. When it is
-            // supplied, the administrator must not remain locked by failures stored in
-            // a reused PostgreSQL volume.
+            admin.setRole(UserRole.ADMIN);
+            admin.setEnabled(true);
+            admin.getProjects().add(defaultProject);
+        } else if (forceAdminRecovery) {
+            if (adminPassword.isBlank()) {
+                throw new IllegalStateException("ADMIN_PASSWORD is required when FORCE_ADMIN_RECOVERY is enabled");
+            }
+            admin.setPasswordHash(passwordEncoder.encode(adminPassword));
             admin.setFailedLoginAttempts(0);
             admin.setLockedUntil(null);
+            admin.setRole(UserRole.ADMIN);
+            admin.setEnabled(true);
         }
-        admin.setRole(UserRole.ADMIN);
-        admin.setEnabled(true);
-        admin.getProjects().add(defaultProject);
         users.save(admin);
     }
 

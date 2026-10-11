@@ -53,7 +53,7 @@ public class TestRunService {
 
     @Transactional
     public TestRunResponse create(CreateTestRunRequest request, Authentication authentication) {
-        var project = access.requireProject(authentication, request.getProjectId(), true);
+        var project = access.requireProjectForExecution(authentication, request.getProjectId());
         var user = access.currentUser(authentication);
         TestCase testCase = requireTestCase(request.getProjectId(), request.getTestCaseId());
         TestRun testRun = new TestRun();
@@ -72,7 +72,7 @@ public class TestRunService {
     public Page<TestRunResponse> findAll(UUID projectId, String q, TestRunStatus status,
                                          EnvironmentType environment, ExecutionType executionType,
                                          UUID testCaseId, boolean finalOnly, Pageable pageable, Authentication authentication) {
-        access.requireProject(authentication, projectId, false);
+        access.requireProject(authentication, projectId);
         Specification<TestRun> spec = (root, query, builder) -> builder.equal(root.get("project").get("id"), projectId);
         if (q != null && !q.isBlank()) {
             String term = "%" + q.trim().toLowerCase(Locale.ROOT) + "%";
@@ -94,14 +94,14 @@ public class TestRunService {
 
     public TestRunResponse findById(UUID id, Authentication authentication) {
         TestRun run = findEntityById(id);
-        access.requireProject(authentication, run.getProject().getId(), false);
+        access.requireProject(authentication, run.getProject().getId());
         return toResponse(run);
     }
 
     @Transactional
     public TestRunResponse update(UUID id, UpdateTestRunRequest request, Authentication authentication) {
         TestRun run = findEntityById(id);
-        access.requireProject(authentication, run.getProject().getId(), true);
+        access.requireProjectForManagement(authentication, run.getProject().getId());
         if (isFinalStatus(run.getStatus())) throw new ConflictException("Finished test runs cannot be edited");
         TestCase testCase = requireTestCase(run.getProject().getId(), request.testCaseId());
         run.setName(request.name().trim());
@@ -115,7 +115,7 @@ public class TestRunService {
     @Transactional
     public TestRunResponse updateDetails(UUID id, UpdateTestRunDetailsRequest request, Authentication authentication) {
         TestRun run = findEntityById(id);
-        access.requireProject(authentication, run.getProject().getId(), true);
+        access.requireProjectForExecution(authentication, run.getProject().getId());
         if (isFinalStatus(run.getStatus())) {
             throw new ConflictException("Finished test runs cannot be edited");
         }
@@ -154,7 +154,7 @@ public class TestRunService {
     @Transactional
     public TestRunResponse updateStatus(UUID id, UpdateTestRunStatusRequest request, Authentication authentication) {
         TestRun run = findEntityById(id);
-        access.requireProject(authentication, run.getProject().getId(), true);
+        access.requireProjectForExecution(authentication, run.getProject().getId());
         TestRunStatus currentStatus = run.getStatus();
         TestRunStatus requestedStatus = request.getStatus();
         validateTransition(currentStatus, requestedStatus);
@@ -174,7 +174,7 @@ public class TestRunService {
     @Transactional
     public void delete(UUID id, Authentication authentication) {
         TestRun run = findEntityById(id);
-        access.requireProject(authentication, run.getProject().getId(), true);
+        access.requireProjectForManagement(authentication, run.getProject().getId());
         testRunRepository.delete(run);
     }
 

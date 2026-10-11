@@ -33,7 +33,7 @@ npm run dev
 
 Abra `http://localhost:5173`. No primeiro início, a aplicação cria um projeto padrão e a conta administrativa informada pelas variáveis de ambiente. Nenhuma senha padrão é exibida ou armazenada no código.
 
-As variáveis de bootstrap mantêm a conta administrativa inicial sincronizada a cada início. Definir uma nova `ADMIN_PASSWORD` e reiniciar o backend atualiza a senha e remove um bloqueio persistido dessa conta. A senha precisa ter de 12 a 72 bytes, com letra maiúscula, minúscula e número.
+As variáveis de bootstrap criam a primeira conta administrativa, mas não sobrescrevem alterações feitas depois pela tela de administração. Em uma recuperação emergencial, defina temporariamente `FORCE_ADMIN_RECOVERY=true`, informe `ADMIN_PASSWORD`, reinicie o backend e volte a variável para `false`. A senha precisa ter de 12 a 72 bytes, com letra maiúscula, minúscula e número.
 
 ## Imagem completa
 
@@ -49,12 +49,12 @@ Na imagem completa, React e API usam a mesma origem: `/` entrega a interface e `
 
 ## Permissões
 
-| Papel | Leitura | Criar casos e execuções | Alterar status | Administrar usuários e projetos |
-| --- | --- | --- | --- | --- |
-| `ADMIN` | Todos os projetos | Sim | Sim | Sim |
-| `MANAGER` | Projetos atribuídos | Sim | Sim | Não |
-| `TESTER` | Projetos atribuídos | Sim | Sim | Não |
-| `VIEWER` | Projetos atribuídos | Não | Não | Não |
+| Papel | Leitura | Gerenciar casos de teste | Executar e registrar resultados | Editar/excluir execuções | Administrar usuários e projetos |
+| --- | --- | --- | --- | --- | --- |
+| `ADMIN` | Todos os projetos | Sim | Sim | Sim | Sim |
+| `MANAGER` | Projetos atribuídos | Sim | Sim | Sim | Não |
+| `TESTER` | Projetos atribuídos | Não | Sim | Não | Não |
+| `VIEWER` | Projetos atribuídos | Não | Não | Não | Não |
 
 Os dados de Test Cases, Test Runs e Results são sempre consultados dentro do projeto ativo. A API valida novamente o vínculo do usuário com o projeto; ocultar botões no frontend não é a única proteção.
 
@@ -88,6 +88,8 @@ SESSION_COOKIE_SECURE=true
 CORS_ALLOWED_ORIGINS=https://automate-it-mini.onrender.com
 HIBERNATE_DDL_AUTO=update
 ```
+
+Mantenha `FORCE_ADMIN_RECOVERY=false` (ou não cadastre essa variável) durante a operação normal, para que redefinições de senha feitas no sistema persistam após novos deploys.
 
 O Render injeta `PORT`; a aplicação o utiliza automaticamente. Mantenha `HIBERNATE_DDL_AUTO=update` nesta publicação para preservar o esquema atual. Uma migração futura para Flyway deve ser preparada e validada antes de trocar esse valor por `validate`.
 

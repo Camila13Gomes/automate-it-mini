@@ -10,6 +10,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Service
@@ -27,14 +28,33 @@ public class UserAccessService {
         if (authentication == null || !authentication.isAuthenticated()) {
             throw new AccessDeniedException("Authentication required");
         }
-        return users.findByUsernameIgnoreCase(authentication.getName())
+        UserAccount user = users.findByUsernameIgnoreCase(authentication.getName())
                 .orElseThrow(() -> new AccessDeniedException("Authenticated user no longer exists"));
+        if (!user.isEnabled() || (user.getLockedUntil() != null && user.getLockedUntil().isAfter(LocalDateTime.now()))) {
+            throw new AccessDeniedException("User account is disabled or locked");
+        }
+        return user;
     }
 
-    public Project requireProject(Authentication authentication, UUID projectId, boolean write) {
+    public Project requireProject(Authentication authentication, UUID projectId) {
+        return requireProjectAccess(authentication, projectId, AccessLevel.READ);
+    }
+
+    public Project requireProjectForManagement(Authentication authentication, UUID projectId) {
+        return requireProjectAccess(authentication, projectId, AccessLevel.MANAGE);
+    }
+
+    public Project requireProjectForExecution(Authentication authentication, UUID projectId) {
+        return requireProjectAccess(authentication, projectId, AccessLevel.EXECUTE);
+    }
+
+    private Project requireProjectAccess(Authentication authentication, UUID projectId, AccessLevel level) {
         UserAccount user = currentUser(authentication);
-        if (write && !user.getRole().canWriteTests()) {
-            throw new AccessDeniedException("Your role has read-only access");
+        if (level == AccessLevel.MANAGE && !user.getRole().canManageTests()) {
+            throw new AccessDeniedException("Your role cannot manage tests");
+        }
+        if (level == AccessLevel.EXECUTE && !user.getRole().canExecuteTests()) {
+            throw new AccessDeniedException("Your role cannot execute tests");
         }
         boolean allowed = user.getRole() == UserRole.ADMIN
                 || user.getProjects().stream().anyMatch(project -> project.getId().equals(projectId));
@@ -44,4 +64,6 @@ public class UserAccessService {
         return projects.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found with id: " + projectId));
     }
+
+    private enum AccessLevel { READ, MANAGE, EXECUTE }
 }

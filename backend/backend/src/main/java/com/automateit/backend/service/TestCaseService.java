@@ -36,7 +36,7 @@ public class TestCaseService {
     @Transactional
     public TestCaseResponse create(CreateTestCaseRequest request, Authentication authentication) {
         TestCase testCase = new TestCase();
-        testCase.setProject(access.requireProject(authentication, request.getProjectId(), true));
+        testCase.setProject(access.requireProjectForManagement(authentication, request.getProjectId()));
         testCase.setName(request.getName().trim());
         testCase.setMethod(request.getMethod().trim().toUpperCase(Locale.ROOT));
         testCase.setEndpoint(request.getEndpoint().trim());
@@ -47,7 +47,7 @@ public class TestCaseService {
 
     public Page<TestCaseResponse> findAll(UUID projectId, String q, String method, Pageable pageable,
                                           Authentication authentication) {
-        access.requireProject(authentication, projectId, false);
+        access.requireProject(authentication, projectId);
         Specification<TestCase> spec = (root, query, builder) -> builder.equal(root.get("project").get("id"), projectId);
         if (q != null && !q.isBlank()) {
             String term = "%" + q.trim().toLowerCase(Locale.ROOT) + "%";
@@ -66,7 +66,7 @@ public class TestCaseService {
     @Transactional
     public TestCaseResponse update(UUID id, UpdateTestCaseRequest request, Authentication authentication) {
         TestCase testCase = findEntity(id);
-        access.requireProject(authentication, testCase.getProject().getId(), true);
+        access.requireProjectForManagement(authentication, testCase.getProject().getId());
         testCase.setName(request.name().trim());
         testCase.setMethod(request.method().trim().toUpperCase(Locale.ROOT));
         testCase.setEndpoint(request.endpoint().trim());
@@ -77,7 +77,7 @@ public class TestCaseService {
     @Transactional
     public void delete(UUID id, Authentication authentication) {
         TestCase testCase = findEntity(id);
-        access.requireProject(authentication, testCase.getProject().getId(), true);
+        access.requireProjectForManagement(authentication, testCase.getProject().getId());
         if (testRunRepository.existsByTestCaseId(id)) {
             throw new ConflictException("Test case cannot be deleted because it has test runs");
         }
@@ -92,7 +92,7 @@ public class TestCaseService {
     public TestCaseResponse findById(UUID id, Authentication authentication) {
         TestCase testCase = testCaseRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Test case not found with id: " + id));
-        access.requireProject(authentication, testCase.getProject().getId(), false);
+        access.requireProject(authentication, testCase.getProject().getId());
 
         return toResponse(testCase);
     }

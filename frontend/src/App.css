@@ -170,9 +170,35 @@ button {
 .status-manager { color: #2366a8; background: #e3f1ff; }
 .status-tester { color: #197550; background: #def5e9; }
 .status-viewer { color: #6d6375; background: #eeeaf0; }
+.status-enabled { color: #197550; background: #def5e9; }
+.status-disabled { color: #a1263f; background: #ffe0e6; }
+
+.permission-summary { line-height: 1.5; }
+.user-operation-form { margin-top: 22px; }
+.user-list-section { margin-top: 22px; }
+.user-card.user-disabled { opacity: 0.72; background: #f4f0f5; }
+.user-title,
+.user-badges,
+.user-controls {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.user-controls { flex-direction: column; align-items: flex-end; }
+.current-user-label {
+  padding: 4px 8px;
+  border-radius: 999px;
+  color: #6940b6;
+  background: #eee7ff;
+  font-size: 11px;
+  font-weight: 800;
+}
+.password-help { display: block; margin-top: 10px; color: #887797; }
 
 @media (max-width: 900px) {
   .admin-grid { grid-template-columns: 1fr; }
+  .user-card { align-items: flex-start; flex-direction: column; }
+  .user-controls { width: 100%; align-items: flex-start; }
 }
 
 @media (max-width: 760px) {

@@ -23,3 +23,31 @@ export function createUser(user) {
     body: JSON.stringify(user),
   })
 }
+
+export function updateUser(id, user) {
+  return apiFetch(`/users/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(user),
+  })
+}
+
+export function setUserEnabled(id, enabled) {
+  return apiFetch(`/users/${id}/enabled`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  })
+}
+
+export function resetUserPassword(id, password) {
+  return apiFetch(`/users/${id}/password`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  })
+}
+
+export function deleteUser(id) {
+  return apiFetch(`/users/${id}`, { method: 'DELETE' })
+}
