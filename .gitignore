@@ -19,6 +19,9 @@ frontend/dist/
 backend/backend/target/
 tmp/
 *.log
+*.bak
+cookies.txt
+*.cookies
 
 # Local database data and backups
 postgres_data/
